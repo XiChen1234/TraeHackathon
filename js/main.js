@@ -112,11 +112,6 @@ function validateFormData(data) {
 
     const breakTime = data.breakTime || 0;
     const slackTime = data.slackOffTime || 0;
-    const effectiveMinutes = totalMinutes - breakTime - slackTime;
-
-    if (effectiveMinutes < 0) {
-        errors.push('休息时间和摸鱼时间不能超过总工作时长');
-    }
 
     if (data.monthlyRent < 0 || data.monthlyRent > 50000) {
         errors.push('月均房租必须在0-50000元之间');
@@ -185,6 +180,78 @@ async function handleFormSubmit(event) {
 }
 
 /**
+ * 计算总工作时长（分钟）
+ * @returns {number} 总工作时长
+ */
+function calculateTotalWorkMinutes() {
+    const startTime = document.getElementById('startTime').value;
+    const endTime = document.getElementById('endTime').value;
+
+    if (!startTime || !endTime) return 540; // 默认 9 小时
+
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const [endHour, endMin] = endTime.split(':').map(Number);
+
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+
+    let totalMinutes = endMinutes - startMinutes;
+    if (totalMinutes < 0) {
+        totalMinutes += 24 * 60; // 跨天情况
+    }
+
+    return Math.max(0, totalMinutes);
+}
+
+/**
+ * 更新滑块最大值
+ * @param {string} sliderId - 滑块ID
+ * @param {number} maxValue - 最大值
+ */
+function updateSliderMax(sliderId, maxValue) {
+    const slider = document.getElementById(sliderId);
+    if (slider) {
+        slider.max = maxValue;
+        if (parseInt(slider.value) > maxValue) {
+            slider.value = maxValue;
+            slider.dispatchEvent(new Event('input'));
+        }
+    }
+}
+
+/**
+ * 更新所有时间相关滑块的最大值
+ */
+function updateAllSliderLimits() {
+    const totalWorkMinutes = calculateTotalWorkMinutes();
+    const maxRestMinutes = Math.floor(totalWorkMinutes * 0.8);
+
+    const breakSlider = document.getElementById('breakTime');
+    const slackSlider = document.getElementById('slackOffTime');
+
+    if (!breakSlider || !slackSlider) return;
+
+    const currentBreakTime = parseInt(breakSlider.value) || 0;
+    const currentSlackTime = parseInt(slackSlider.value) || 0;
+
+    const maxSlackMinutes = maxRestMinutes - currentBreakTime;
+    const maxBreakMinutes = maxRestMinutes - currentSlackTime;
+
+    breakSlider.max = Math.max(0, maxBreakMinutes);
+    slackSlider.max = Math.max(0, maxSlackMinutes);
+
+    if (parseInt(breakSlider.value) > breakSlider.max) {
+        breakSlider.value = breakSlider.max;
+        breakSlider.dispatchEvent(new Event('input'));
+    }
+
+    if (parseInt(slackSlider.value) > slackSlider.max) {
+        slackSlider.value = slackSlider.max;
+        slackSlider.dispatchEvent(new Event('input'));
+    }
+}
+
+/**
  * 初始化事件监听器
  */
 function initEventListeners() {
@@ -194,6 +261,8 @@ function initEventListeners() {
 
     const salaryType = document.getElementById('salaryType');
     const workDaysType = document.getElementById('workDaysType');
+    const startTime = document.getElementById('startTime');
+    const endTime = document.getElementById('endTime');
 
     salaryType.addEventListener('change', () => {
         renderSalaryUnit(salaryType.value);
@@ -202,6 +271,29 @@ function initEventListeners() {
     workDaysType.addEventListener('change', () => {
         renderCustomDaysInput(workDaysType.value);
     });
+
+    startTime.addEventListener('change', () => {
+        updateAllSliderLimits();
+    });
+
+    endTime.addEventListener('change', () => {
+        updateAllSliderLimits();
+    });
+
+    const breakSlider = document.getElementById('breakTime');
+    const slackSlider = document.getElementById('slackOffTime');
+
+    if (breakSlider) {
+        breakSlider.addEventListener('input', () => {
+            updateAllSliderLimits();
+        });
+    }
+
+    if (slackSlider) {
+        slackSlider.addEventListener('input', () => {
+            updateAllSliderLimits();
+        });
+    }
 
     renderSliderValue('breakTime', 'breakTimeValue');
     renderSliderValue('slackOffTime', 'slackOffTimeValue');
@@ -241,6 +333,7 @@ function initEventListeners() {
 function initApp() {
     renderSalaryUnit('monthly');
     renderCustomDaysInput('doubleRest');
+    updateAllSliderLimits();
     initEventListeners();
 }
 
